@@ -40,6 +40,9 @@
 (defvar architect-template-replacements nil
   "The list of template replatement.")
 
+(defvar architect-template-commits nil
+  "The list of template commits.")
+
 (defvar architect-template-destination nil
   "The destination directory template.")
 
@@ -79,6 +82,12 @@
   (setq architect-template-variables
         (append architect-template-variables (list args))))
 
+(defun architect-define-commit (&rest args)
+  "Define commits for a template. It's generally used in
+`template.el' file."
+  (setq architect-template-commits
+        (append architect-template-commits (list args))))
+
 (defun architect-define-default-directory (directory)
   "Define directory for a template. It's generally used in
 `template.el' file."
@@ -87,10 +96,13 @@
 
 (defun architect-plist-get (plist key)
   "This function is used to get plist value."
-  (eval (plist-get plist key)))
+  (let ((value (plist-get plist key)))
+    (if (not (string-equal (type-of value) "symbol"))
+        (eval value)
+      value)))
 
 (defun architect-read-string (plist)
-  "This function is used to get user input string. It require an)
+  "This function is used to get user input string. It require an))))
 non-empty string before to return it."
   (let ((answer) (valid) (prompt-text) (prompt-error-text)
         (input (architect-plist-get plist :input))
@@ -113,27 +125,29 @@ non-empty string before to return it."
 (defun architect-set-directory (target)
   "This function provide a prompt input to ask where the project
 will be created."
-  (let* ((base-directory
+  (let* ((path
            (read-directory-name
              "Directory: "
-             architect-template-default-directory
-             nil t))
-         (project-directory
-           (architect-read-string
-             '(:regex "^[-_A-Za-z0-9]+$"
-               :input (concat "Destination " base-directory)
-               :input-error "alphanumeric"))))
+             architect-template-default-directory)))
     (setq architect-template-destination
-          (concat base-directory project-directory))))
+      (if (not (file-directory-p path)) path
+        (concat path
+          (architect-read-string
+            '(:regex "^[-_A-Za-z0-9]+$"
+              :input (concat "Destination " path)
+              :input-error "alphanumeric")))))))
 
 (defun architect-set-variables ()
-  "This function loop into `architect-template-variables' and))))
+  "This function loop into `architect-template-variables' and
 execute an user prompt. It return an assosiative array that will
 be used to replace in template file."
-  (let ((variables) (selector) (value))
+  (let ((variables) (selector) (value) (after-function))
     (dolist (args architect-template-variables)
-      (setq selector (architect-plist-get args :variable))
-      (setq value (architect-read-string args))
+      (setq selector (architect-plist-get args :variable)
+            after-function (architect-plist-get args :after-function)
+            value (architect-read-string args))
+      (when after-function
+        (setq value (funcall after-function value)))
       (push (cons selector value) architect-template-replacements))))
 
 (defun architect-recursive-directory ()
@@ -166,6 +180,22 @@ template variables."
         (replace-match (cdr replacement)))
       replacement)))
 
+(defun architect-make-directory ()
+  "This function create directory recursively."
+  (let ((directory (file-name-directory architect-template-destination)))
+    (make-directory directory t)))
+
+(defun architect-commit ()
+  "This function scan `architect-template-commits' variable and
+stage file to commit them."
+  (dolist (commit architect-template-commits)
+    (let ((stage (architect-plist-get commit :add))
+          (message (architect-plist-get commit :message)))
+      (shell-command-to-string
+        (format "git add %s" stage))
+      (shell-command-to-string
+        (format "git commit -m \"%s\"" message)))))
+
 (defun architect-create-project (template-name)
   "This function is used as action to ivy prompt executed in main
 `architect' function."
@@ -173,17 +203,19 @@ template variables."
     (architect-load-configuration path)
     (architect-set-directory template-name)
     (architect-set-variables)
-    (shell-command (format "cp -r %s %s" path architect-template-destination))
-    (message (format "Creating %s..." architect-template-destination))
+    (architect-make-directory)
+    (shell-command-to-string
+      (format "cp -r %s %s" path architect-template-destination))
     (let ((default-directory architect-template-destination))
       (dolist (path (architect-recursive-directory))
         (architect-replace-filename path))
       (dolist (path (architect-recursive-directory))
-        (message (format "Checking %s for replacement..." path))
         (unless (file-directory-p path)
-          (architect-apply-replacement path))))
-    (dired architect-template-destination)
-    (message "")))
+          (architect-apply-replacement path)))
+      (shell-command-to-string
+        (format "git init %s" architect-template-destination))
+      (architect-commit))
+    (dired architect-template-destination)))
 
 ;;; External Architect functions.
 
@@ -195,6 +227,7 @@ directory."
   (interactive)
   (setq architect-template-variables nil
         architect-template-replacements nil
+        architect-template-commits nil
         architect-template-default-directory nil)
   (ivy-read "Create project: "
             (architect-template-candidates)
