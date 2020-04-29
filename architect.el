@@ -3,7 +3,7 @@
 ;; Copyright (c) Marc-Antoine Loignon
 
 ;; Author: Marc-Antoine Loignon <developer@lognoz.org>
-;; Keywords: architect
+;; Keywords: project architect
 
 ;; This file is not part of GNU Emacs.
 
@@ -26,13 +26,18 @@
 
 ;;; Contextual Architect constant.
 
+(defgroup achitect nil
+  "Provide functionality to create project template quickly."
+  :prefix "architect"
+  :group 'lisp)
+
 (defconst architect-base-directory (file-name-directory load-file-name)
   "The directory Architect was loaded from.")
 
-;;; Contextual Architect variables.
-
-(defvar architect-source-directory (concat architect-base-directory "src/")
-  "The directory of source templates.")
+(defcustom architect-source-directory nil
+  "The directory of source templates."
+  :type 'directory
+  :group 'architect)
 
 (defvar architect-template-variables nil
   "The list of template variables.")
@@ -60,6 +65,8 @@
 (defun architect-template-candidates ()
   "This function return the list of directories located into
 `architect-source-directory' to provide prompt candidates."
+  (unless architect-source-directory
+    (error (concat "Need to define 'architect-source-directory' variable.")))
   (let ((list))
     (dolist (f (directory-files architect-source-directory))
       (let ((path (concat architect-source-directory f)))
@@ -217,21 +224,23 @@ stage file to commit them."
       (architect-commit))
     (dired architect-template-destination)))
 
+(defun architect-completing-read ()
+  "Read and return a template name."
+  (let ((candidates (architect-template-candidates)))
+    (list (completing-read "Create project: " candidates nil t))))
+
 ;;; External Architect functions.
 
 ;;;###autoload
-(defun architect ()
+(defun architect (template)
   "Provide functionality to create project template quickly. If
-you want to create a new template, please add it to Architect src
-directory."
-  (interactive)
+you want to create a new template, please add it to
+`architect-source-directory'."
+  (interactive (architect-completing-read))
   (setq architect-template-variables nil
         architect-template-replacements nil
         architect-template-commits nil
         architect-template-default-directory nil)
-  (ivy-read "Create project: "
-            (architect-template-candidates)
-            :require-match t
-            :action 'architect-create-project))
+  (architect-create-project template))
 
 (provide 'architect)
