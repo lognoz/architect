@@ -29,7 +29,8 @@
 (defgroup achitect nil
   "Provide functionality to create project template quickly."
   :prefix "architect"
-  :group 'lisp)
+  :group 'tools
+  :link '(url-link :tag "Github" "https://github.com/lognoz/architect"))
 
 (defconst architect-base-directory (file-name-directory load-file-name)
   "The directory Architect was loaded from.")
@@ -244,3 +245,5 @@ you want to create a new template, please add it to
   (architect-create-project template))
 
 (provide 'architect)
+
+;;; architect.el ends here
