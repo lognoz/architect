@@ -1,24 +1,37 @@
-;; architect.el --- Architect File
+;; architect.el --- Architect File  -*- lexical-binding: t; -*-
 
-;; Copyright (c) Marc-Antoine Loignon
+;; Copyright (c) 2020 Marc-Antoine Loignon
 
 ;; Author: Marc-Antoine Loignon <developer@lognoz.org>
+;; Homepage: https://github.com/lognoz/architect
 ;; Keywords: project architect
+;; Package-Version: 0.1
+;; Package-Requires: ((emacs "26.3"))
 
 ;; This file is not part of GNU Emacs.
 
-;; This Emacs config is free software: you can redistribute it and/or
-;; modify it under the terms of the GNU General Public License as
-;; published by the Free Software Foundation, either version 3 of the
-;; License, or (at your option) any later version.
+;;; License: GNU General Public License v3.0
 
-;; This Emacs config is distributed in the hope that it will be
-;; useful, but WITHOUT ANY WARRANTY; without even the implied warranty
-;; of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
-;; General Public License for more details.
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+;; GNU General Public License for more details.
 
 ;; You should have received a copy of the GNU General Public License
-;; along with this Emacs config. If not, see <https://www.gnu.org/licenses/>.
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+;;; Commentary:
+
+;; Generate project rapidly by using template.
+;; https://github.com/lognoz/architect
+
+;; This project is inspired by project-archetypes by Magnar Sveen.
+;; https://github.com/magnars/.emacs.d/tree/master/project-archetypes
 
 ;;; Code:
 
@@ -30,15 +43,26 @@
   "Provide functionality to create project template quickly."
   :prefix "architect"
   :group 'tools
-  :link '(url-link :tag "Github" "https://github.com/lognoz/architect"))
+  :link '(url-link "https://github.com/lognoz/architect"))
 
-(defconst architect-base-directory (file-name-directory load-file-name)
-  "The directory Architect was loaded from.")
+(defgroup architect-faces nil
+  "Faces used in Architect."
+  :group 'architect
+  :group 'faces)
 
 (defcustom architect-source-directory nil
   "The directory of source templates."
-  :type 'directory
-  :group 'architect)
+  :group 'architect
+  :type 'string
+  :safe 'f-directory?)
+
+(defface architect-error-face
+  '((t :foreground "#ce5555"))
+  "Face when in user prompt when input doesn't match."
+  :group 'architect-faces)
+
+(defconst architect-base-directory (file-name-directory load-file-name)
+  "The directory Architect was loaded from.")
 
 (defvar architect-template-variables nil
   "The list of template variables.")
@@ -55,16 +79,10 @@
 (defvar architect-template-default-directory nil
   "The template default directory.")
 
-;;; Internal Architect face.
-
-(defface architect-error-face
-  '((t :foreground "#ce5555"))
-  "Face when in user prompt when input doesn't match.")
-
 ;;; Internal Architect functions.
 
 (defun architect-template-candidates ()
-  "This function return the list of directories located into
+  "This function return the list of directories located into))
 `architect-source-directory' to provide prompt candidates."
   (unless architect-source-directory
     (error (concat "Need to define 'architect-source-directory' variable.")))
@@ -130,7 +148,7 @@ non-empty string before to return it."
         (setq prompt-text prompt-error-text)))
     answer))
 
-(defun architect-set-directory (target)
+(defun architect-set-directory ()
   "This function provide a prompt input to ask where the project
 will be created."
   (let* ((path
@@ -149,7 +167,7 @@ will be created."
   "This function loop into `architect-template-variables' and
 execute an user prompt. It return an assosiative array that will
 be used to replace in template file."
-  (let ((variables) (selector) (value) (after-function))
+  (let ((selector) (value) (after-function))
     (dolist (args architect-template-variables)
       (setq selector (architect-plist-get args :variable)
             after-function (architect-plist-get args :after-function)
@@ -209,7 +227,7 @@ stage file to commit them."
 `architect' function."
   (let* ((path (concat architect-source-directory template-name)))
     (architect-load-configuration path)
-    (architect-set-directory template-name)
+    (architect-set-directory)
     (architect-set-variables)
     (architect-make-directory)
     (shell-command-to-string
