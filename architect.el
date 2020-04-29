@@ -50,11 +50,10 @@
   :group 'architect
   :group 'faces)
 
-(defcustom architect-source-directory nil
+(defcustom architect-directory nil
   "The directory of source templates."
   :group 'architect
-  :type 'string
-  :safe 'f-directory?)
+  :type 'string)
 
 (defface architect-error-face
   '((t :foreground "#ce5555"))
@@ -81,14 +80,23 @@
 
 ;;; Internal Architect functions.
 
+(defun architect-validate-directory ()
+  "This function check if the user given directory is valid."
+  (let ((directory architect-directory))
+    (unless (stringp directory)
+      (error (format "architect-directory malformed, value need to be a string")))
+    (setq directory (concat (string-trim directory nil "/") "/"))
+    (unless (file-directory-p directory)
+      (error "Directory %S does not exist" directory))
+    (setq architect-directory directory)))
+
 (defun architect-template-candidates ()
   "This function return the list of directories located into))
-`architect-source-directory' to provide prompt candidates."
-  (unless architect-source-directory
-    (error (concat "Need to define 'architect-source-directory' variable.")))
+`architect-directory' to provide prompt candidates."
+  (architect-validate-directory)
   (let ((list))
-    (dolist (f (directory-files architect-source-directory))
-      (let ((path (concat architect-source-directory f)))
+    (dolist (f (directory-files architect-directory))
+      (let ((path (concat architect-directory f)))
         (when (and (file-directory-p path)
                    (not (equal f "."))
                    (not (equal f "..")))
@@ -127,27 +135,6 @@
         (eval value)
       value)))
 
-(defun architect-read-string (plist)
-  "This function is used to get user input string. It require an))))
-non-empty string before to return it."
-  (let ((answer) (valid) (prompt-text) (prompt-error-text)
-        (input (architect-plist-get plist :input))
-        (input-error (architect-plist-get plist :input-error))
-        (regex (architect-plist-get plist :regex)))
-    (unless regex (setq regex ".+"))
-    (unless input-error (setq input-error "require"))
-    (setq prompt-text (concat input ": ")
-          prompt-error-text
-            (format "%s (%s): " input
-                    (propertize input-error 'face
-                                'architect-error-face)))
-    (while (not valid)
-      (setq answer (string-trim (read-string prompt-text answer)))
-      (if (string-match-p regex answer)
-          (setq valid t)
-        (setq prompt-text prompt-error-text)))
-    answer))
-
 (defun architect-set-directory ()
   "This function provide a prompt input to ask where the project
 will be created."
@@ -155,16 +142,19 @@ will be created."
            (read-directory-name
              "Directory: "
              architect-template-default-directory)))
-    (setq architect-template-destination
-      (if (not (file-directory-p path)) path
+    (setq path (concat (string-trim path nil "/") "/"))
+    (when (file-directory-p path)
+      (setq path
         (concat path
           (architect-read-string
-            '(:regex "^[-_A-Za-z0-9]+$"
-              :input (concat "Destination " path)
-              :input-error "alphanumeric")))))))
+            (list :regex "^[-_A-Za-z0-9]+$"
+                  :input (concat "Destination " path)
+                  :input-error "alphanumeric")))))
+    (setq architect-template-destination
+          (string-trim path nil "/"))))
 
 (defun architect-set-variables ()
-  "This function loop into `architect-template-variables' and
+  "This function loop into `architect-template-variables' and)))))
 execute an user prompt. It return an assosiative array that will
 be used to replace in template file."
   (let ((selector) (value) (after-function))
@@ -225,7 +215,7 @@ stage file to commit them."
 (defun architect-create-project (template-name)
   "This function is used as action to ivy prompt executed in main
 `architect' function."
-  (let* ((path (concat architect-source-directory template-name)))
+  (let* ((path (concat architect-directory template-name)))
     (architect-load-configuration path)
     (architect-set-directory)
     (architect-set-variables)
@@ -243,6 +233,27 @@ stage file to commit them."
       (architect-commit))
     (dired architect-template-destination)))
 
+(defun architect-read-string (plist)
+  "This function is used to get user input string. It require an))))
+non-empty string before to return it."
+  (let ((answer) (valid) (prompt-text) (prompt-error-text)
+        (input (architect-plist-get plist :input))
+        (input-error (architect-plist-get plist :input-error))
+        (regex (architect-plist-get plist :regex)))
+    (unless regex (setq regex ".+"))
+    (unless input-error (setq input-error "require"))
+    (setq prompt-text (concat input ": ")
+          prompt-error-text
+            (format "%s (%s): " input
+                    (propertize input-error 'face
+                                'architect-error-face)))
+    (while (not valid)
+      (setq answer (string-trim (read-string prompt-text answer)))
+      (if (string-match-p regex answer)
+          (setq valid t)
+        (setq prompt-text prompt-error-text)))
+    answer))
+
 (defun architect-completing-read ()
   "Read and return a template name."
   (let ((candidates (architect-template-candidates)))
@@ -254,7 +265,7 @@ stage file to commit them."
 (defun architect (template)
   "Provide functionality to create project template quickly. If
 you want to create a new template, please add it to
-`architect-source-directory'."
+`architect-directory'."
   (interactive (architect-completing-read))
   (setq architect-template-variables nil
         architect-template-replacements nil
