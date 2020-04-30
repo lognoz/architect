@@ -3,7 +3,7 @@
 EMACS ?= emacs
 LOAD = -l architect.el -l test/architect-test.el
 
-all: compile test checkdoc
+all: compile test autoload checkdoc
 
 test:
 	$(EMACS) -batch $(LOAD) -f ert-run-tests-batch-and-exit
@@ -13,6 +13,9 @@ compile:
 
 checkdoc:
 	$(EMACS) -batch -l make/checkdoc.el
+
+autoload:
+	$(EMACS) -batch -l make/autoload.el
 
 clean:
 	rm -f *.elc
