@@ -122,37 +122,6 @@ It skips the validation if NULL-ALLOWED is true."
     (when (and value (not (equal (type-of value) type)))
       (error (format "%s expects %s to be a %s" error-prefix key type)))))
 
-(defun architect-define-variable (&rest args)
-  "Define variables that will be fetch in `architect-set-variables'.
-This function is expect to receive plist ARGS like :variable,
-:regex, :input, :input-error, :after-function and :value."
-  (let ((error-prefix "Architect: architect-define-variable"))
-    (architect-validate-definition :variable args 'string error-prefix)
-    (architect-validate-definition :after-function args 'symbol error-prefix t)
-    (let ((value (plist-get args :value))
-          (input (plist-get args :input)))
-      (when (or (and (not value) (not input)) (and value input))
-        (error (format "%s expects to receive :input or :value" error-prefix))))
-    (dolist (key '(:value :regex :input :input-error))
-      (architect-validate-definition key args 'string error-prefix t)))
-  (setq architect-template-variables
-        (append architect-template-variables (list args))))
-
-(defun architect-define-commit (&rest args)
-  "Define commits that will be fetch and be executed in `architect-commit'.
-This function is expect to receive plist ARGS like :add and :message."
-  (let ((error-prefix "Architect: architect-define-commit"))
-    (architect-validate-definition :add args 'string error-prefix)
-    (architect-validate-definition :message args 'string error-prefix))
-  (setq architect-template-commits
-        (append architect-template-commits (list args))))
-
-(defun architect-define-default-directory (directory)
-  "Define DIRECTORY that will be used in `architect-set-directory'.
-This command is used in `architect.el' template file."
-  (when (file-directory-p directory)
-    (setq architect-template-default-directory directory)))
-
 (defun architect-set-directory ()
   "Provide prompt to ask where the project will be created."
   (let* ((path
@@ -282,6 +251,40 @@ It require an non-empty string before to return it."
     (list (completing-read "Create project: " candidates nil t))))
 
 ;;; External Architect functions.
+
+;;;###autoload
+(defun architect-define-variable (&rest args)
+  "Define variables that will be fetch in `architect-set-variables'.
+This function is expect to receive plist ARGS like :variable,
+:regex, :input, :input-error, :after-function and :value."
+  (let ((error-prefix "Architect: architect-define-variable"))
+    (architect-validate-definition :variable args 'string error-prefix)
+    (architect-validate-definition :after-function args 'symbol error-prefix t)
+    (let ((value (plist-get args :value))
+          (input (plist-get args :input)))
+      (when (or (and (not value) (not input)) (and value input))
+        (error (format "%s expects to receive :input or :value" error-prefix))))
+    (dolist (key '(:value :regex :input :input-error))
+      (architect-validate-definition key args 'string error-prefix t)))
+  (setq architect-template-variables
+        (append architect-template-variables (list args))))
+
+;;;###autoload
+(defun architect-define-commit (&rest args)
+  "Define commits that will be fetch and be executed in `architect-commit'.
+This function is expect to receive plist ARGS like :add and :message."
+  (let ((error-prefix "Architect: architect-define-commit"))
+    (architect-validate-definition :add args 'string error-prefix)
+    (architect-validate-definition :message args 'string error-prefix))
+  (setq architect-template-commits
+        (append architect-template-commits (list args))))
+
+;;;###autoload
+(defun architect-define-default-directory (directory)
+  "Define DIRECTORY that will be used in `architect-set-directory'.
+This command is used in `architect.el' template file."
+  (when (file-directory-p directory)
+    (setq architect-template-default-directory directory)))
 
 ;;;###autoload
 (defun architect (template)
