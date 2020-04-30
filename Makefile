@@ -1,8 +1,12 @@
 # See LICENSE file for copyright and license details.
 
 EMACS ?= emacs
+LOAD = -l architect.el -l test/architect-test.el
 
-all: compile checkdoc
+all: compile test checkdoc
+
+test:
+	$(EMACS) -batch $(LOAD) -f ert-run-tests-batch-and-exit
 
 compile:
 	$(EMACS) -batch -l make/compile.el
@@ -13,4 +17,4 @@ checkdoc:
 clean:
 	rm -f *.elc
 
-.PHONY: all clean
+.PHONY: all test clean
