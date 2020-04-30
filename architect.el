@@ -98,6 +98,7 @@ Return a list of directories located into `architect-directory'."
     (dolist (f (directory-files architect-directory))
       (let ((path (concat architect-directory f)))
         (when (and (file-directory-p path)
+                   (file-exists-p (concat path "/architect.el"))
                    (not (equal f "."))
                    (not (equal f "..")))
           (push (file-name-nondirectory path) list))))
@@ -105,7 +106,7 @@ Return a list of directories located into `architect-directory'."
 
 (defun architect-load-configuration (path)
   "This function load project configuration by PATH."
-  (let ((path (concat path "/template.el")))
+  (let ((path (concat path "/architect.el")))
     (if (file-exists-p path)
         (load path nil 'nomessage)
       (error (format "File '%s' not found." path)))))
@@ -148,7 +149,7 @@ This function is expect to receive plist ARGS like :add and :message."
 
 (defun architect-define-default-directory (directory)
   "Define DIRECTORY that will be used in `architect-set-directory'.
-This command is used in `template.el' file."
+This command is used in `architect.el' template file."
   (when (file-directory-p directory)
     (setq architect-template-default-directory directory)))
 
@@ -173,11 +174,13 @@ This command is used in `template.el' file."
   "Fetch into `architect-template-variables' and execute prompt.
 This function return an assosiative array that will be used to
 replace in template file."
-  (let ((selector) (value) (after-function))
+  (let ((selector) (after-function) (value))
     (dolist (args architect-template-variables)
       (setq selector (plist-get args :variable)
             after-function (plist-get args :after-function)
-            value (architect-read-string args))
+            value (plist-get args :value))
+      (unless value
+        (setq value (architect-read-string args)))
       (when after-function
         (setq value (funcall after-function value)))
       (push (cons selector value) architect-template-replacements))))
@@ -237,6 +240,8 @@ This function is executed after `architect' function prompt."
     (shell-command-to-string
       (format "cp -r %s %s" path architect-template-destination))
     (let ((default-directory architect-template-destination))
+      (shell-command-to-string
+        (format "rm -f %s/architect.el" architect-template-destination))
       (dolist (path (architect-recursive-directory))
         (architect-replace-filename path))
       (dolist (path (architect-recursive-directory))
