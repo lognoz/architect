@@ -185,11 +185,6 @@ replace in template file."
         (setq value (funcall after-function value)))
       (push (cons selector value) architect-template-replacements))))
 
-(defun architect-recursive-directory ()
-  "Return this list of recursive files and directories by path."
-  (split-string
-    (shell-command-to-string "find .")))
-
 (defun architect-replace-filename (path)
   "Apply filename replacement based on template variables.
 This function expect to recive a PATH that will be used to fetch
@@ -202,7 +197,8 @@ recursively."
           (setq return-path
             (replace-regexp-in-string
               variable value return-path nil 'literal))
-          (rename-file path return-path))))))
+          (rename-file path return-path))))
+    return-path))
 
 (defun architect-apply-replacement (file)
   "Scan FILE content to apply replacement based on template variables."
@@ -214,10 +210,12 @@ recursively."
         (replace-match (cdr replacement)))
       replacement)))
 
-(defun architect-make-directory ()
-  "Create directory recursively."
+(defun architect-copy-template (path)
+  "Create directory recursively and copy template content.
+This function expect to recive PATH argument."
   (let ((directory (file-name-directory architect-template-destination)))
-    (make-directory directory t)))
+    (make-directory directory t))
+  (copy-directory path architect-template-destination))
 
 (defun architect-commit ()
   "Fetch `architect-template-commits' and stage file to commit them."
@@ -229,22 +227,27 @@ recursively."
       (shell-command-to-string
         (format "git commit -m \"%s\"" message)))))
 
+(defun architect-rename-files (directory)
+  "Rename files in DIRECTORY by replacing variables define in path."
+  (dolist (f (directory-files directory))
+    (unless (or (equal f ".") (equal f ".."))
+      (let ((path (concat directory "/" f)))
+        (setq path (architect-replace-filename path))
+        (when (file-directory-p path)
+          (architect-rename-files path))))))
+
 (defun architect-create-project (template-name)
   "Create project by argument TEMPLATE-NAME.
 This function is executed after `architect' function prompt."
-  (let* ((path (concat architect-directory template-name)))
+  (let* ((path (expand-file-name (concat architect-directory template-name))))
     (architect-load-configuration path)
     (architect-set-directory)
     (architect-set-variables)
-    (architect-make-directory)
-    (shell-command-to-string
-      (format "cp -r %s %s" path architect-template-destination))
+    (architect-copy-template path)
+    (architect-rename-files architect-template-destination)
     (let ((default-directory architect-template-destination))
-      (shell-command-to-string
-        (format "rm -f %s/architect.el" architect-template-destination))
-      (dolist (path (architect-recursive-directory))
-        (architect-replace-filename path))
-      (dolist (path (architect-recursive-directory))
+      (delete-file "architect.el")
+      (dolist (path (directory-files-recursively "." ""))
         (unless (file-directory-p path)
           (architect-apply-replacement path)))
       (shell-command-to-string
