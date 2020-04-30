@@ -81,7 +81,7 @@
 ;;; Internal Architect functions.
 
 (defun architect-validate-directory ()
-  "This function check if the user given directory is valid."
+  "Check if the user given directory is valid."
   (let ((directory architect-directory))
     (unless (stringp directory)
       (error (format "architect-directory malformed, value need to be a string")))
@@ -91,8 +91,8 @@
     (setq architect-directory directory)))
 
 (defun architect-template-candidates ()
-  "This function return the list of directories located into))
-`architect-directory' to provide prompt candidates."
+  "Provide candidates to `architect' prompt.
+Return a list of directories located into `architect-directory'."
   (architect-validate-directory)
   (let ((list))
     (dolist (f (directory-files architect-directory))
@@ -104,40 +104,37 @@
     list))
 
 (defun architect-load-configuration (path)
-  "This function load project configuration by path."
+  "This function load project configuration by PATH."
   (let ((path (concat path "/template.el")))
     (if (file-exists-p path)
         (load path nil 'nomessage)
       (error (format "File '%s' not found." path)))))
 
 (defun architect-define-variable (&rest args)
-  "Define variables for a template. It's generally used in
-`template.el' file."
+  "Define variables that will be fetch in `architect-set-variables'.
+This function is expect to receive plist ARGS like :variable,
+:regex, :input, :input-error, :after-function."
   (setq architect-template-variables
         (append architect-template-variables (list args))))
 
 (defun architect-define-commit (&rest args)
-  "Define commits for a template. It's generally used in
-`template.el' file."
+  "Define commits that will be fetch and be executed in `architect-commit'.
+This function is expect to receive plist ARGS like :add and :message."
   (setq architect-template-commits
         (append architect-template-commits (list args))))
 
 (defun architect-define-default-directory (directory)
-  "Define directory for a template. It's generally used in
-`template.el' file."
+  "Define DIRECTORY that will be used in `architect-set-directory'.
+This command is used in `template.el' file."
   (when (file-directory-p directory)
     (setq architect-template-default-directory directory)))
 
 (defun architect-plist-get (plist key)
-  "This function is used to get plist value."
-  (let ((value (plist-get plist key)))
-    (if (not (string-equal (type-of value) "symbol"))
-        (eval value)
-      value)))
+  "Return KEY value in PLIST."
+  (plist-get plist key))
 
 (defun architect-set-directory ()
-  "This function provide a prompt input to ask where the project
-will be created."
+  "Provide prompt to ask where the project will be created."
   (let* ((path
            (read-directory-name
              "Directory: "
@@ -154,9 +151,9 @@ will be created."
           (string-trim path nil "/"))))
 
 (defun architect-set-variables ()
-  "This function loop into `architect-template-variables' and)))))
-execute an user prompt. It return an assosiative array that will
-be used to replace in template file."
+  "Fetch into `architect-template-variables' and execute prompt.
+This function return an assosiative array that will be used to
+replace in template file."
   (let ((selector) (value) (after-function))
     (dolist (args architect-template-variables)
       (setq selector (architect-plist-get args :variable)
@@ -167,14 +164,14 @@ be used to replace in template file."
       (push (cons selector value) architect-template-replacements))))
 
 (defun architect-recursive-directory ()
-  "This function return this list of recursive files and
-directories by path."
+  "Return this list of recursive files and directories by path."
   (split-string
     (shell-command-to-string "find .")))
 
 (defun architect-replace-filename (path)
-  "This function apply filename replacement based on template
-variables."
+  "Apply filename replacement based on template variables.
+This function expect to recive a PATH that will be used to fetch
+recursively."
   (let ((return-path path))
     (dolist (replacement architect-template-replacements)
       (let ((variable (car replacement))
@@ -185,11 +182,10 @@ variables."
               variable value return-path nil 'literal))
           (rename-file path return-path))))))
 
-(defun architect-apply-replacement (path)
-  "This function scan file content to apply replacement based on
-template variables."
-  (with-temp-file path
-    (insert-file-contents-literally path)
+(defun architect-apply-replacement (file)
+  "Scan FILE content to apply replacement based on template variables."
+  (with-temp-file file
+    (insert-file-contents-literally file)
     (dolist (replacement architect-template-replacements)
       (goto-char 0)
       (while (search-forward (car replacement) nil t)
@@ -197,13 +193,12 @@ template variables."
       replacement)))
 
 (defun architect-make-directory ()
-  "This function create directory recursively."
+  "Create directory recursively."
   (let ((directory (file-name-directory architect-template-destination)))
     (make-directory directory t)))
 
 (defun architect-commit ()
-  "This function scan `architect-template-commits' variable and
-stage file to commit them."
+  "Fetch `architect-template-commits' and stage file to commit them."
   (dolist (commit architect-template-commits)
     (let ((stage (architect-plist-get commit :add))
           (message (architect-plist-get commit :message)))
@@ -213,8 +208,8 @@ stage file to commit them."
         (format "git commit -m \"%s\"" message)))))
 
 (defun architect-create-project (template-name)
-  "This function is used as action to ivy prompt executed in main
-`architect' function."
+  "Create project by argument TEMPLATE-NAME.
+This function is executed after `architect' function prompt."
   (let* ((path (concat architect-directory template-name)))
     (architect-load-configuration path)
     (architect-set-directory)
@@ -234,8 +229,8 @@ stage file to commit them."
     (dired architect-template-destination)))
 
 (defun architect-read-string (plist)
-  "This function is used to get user input string. It require an))))
-non-empty string before to return it."
+  "Provide string input by defined PLIST.
+It require an non-empty string before to return it."
   (let ((answer) (valid) (prompt-text) (prompt-error-text)
         (input (architect-plist-get plist :input))
         (input-error (architect-plist-get plist :input-error))
@@ -263,9 +258,9 @@ non-empty string before to return it."
 
 ;;;###autoload
 (defun architect (template)
-  "Provide functionality to create project template quickly. If
-you want to create a new template, please add it to
-`architect-directory'."
+  "Provide functionality to create project quickly.
+This function provide a prompt to choose which TEMPLATE you want
+to create."
   (interactive (architect-completing-read))
   (setq architect-template-variables nil
         architect-template-replacements nil
