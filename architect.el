@@ -84,8 +84,8 @@
   "Check if the user given directory is valid."
   (let ((directory architect-directory))
     (unless (stringp directory)
-      (error (format "architect-directory malformed, value need to be a string")))
-    (setq directory (concat (string-trim directory nil "/") "/"))
+      (error (format "Variable architect-directory malformed, value need to be a string")))
+    (setq directory (concat (string-trim-right directory "/") "/"))
     (unless (file-directory-p directory)
       (error "Directory %S does not exist" directory))
     (setq architect-directory directory)))
@@ -110,10 +110,30 @@ Return a list of directories located into `architect-directory'."
         (load path nil 'nomessage)
       (error (format "File '%s' not found." path)))))
 
+(defun architect-validate-definition (key args type &optional error-prefix null-allowed)
+  "Throw error if given KEY in ARGS is valid or not.
+This function checks if value is the same as TYPE argument.
+If it's not it print an error message based on ERROR-PREFIX.
+It skips the validation if NULL-ALLOWED is true."
+  (let ((value (plist-get args key)))
+    (when (and (not null-allowed) (not value))
+      (error (format "%s expects to receive %s" error-prefix key)))
+    (when (and value (not (equal (type-of value) type)))
+      (error (format "%s expects %s to be a %s" error-prefix key type)))))
+
 (defun architect-define-variable (&rest args)
   "Define variables that will be fetch in `architect-set-variables'.
 This function is expect to receive plist ARGS like :variable,
-:regex, :input, :input-error, :after-function."
+:regex, :input, :input-error, :after-function and :value."
+  (let ((error-prefix "Architect: architect-define-variable"))
+    (architect-validate-definition :variable args 'string error-prefix)
+    (architect-validate-definition :after-function args 'symbol error-prefix t)
+    (let ((value (plist-get args :value))
+          (input (plist-get args :input)))
+      (when (or (and (not value) (not input)) (and value input))
+        (error (format "%s expects to receive :input or :value" error-prefix))))
+    (dolist (key '(:value :regex :input :input-error))
+      (architect-validate-definition key args 'string error-prefix t)))
   (setq architect-template-variables
         (append architect-template-variables (list args))))
 
@@ -129,17 +149,13 @@ This command is used in `template.el' file."
   (when (file-directory-p directory)
     (setq architect-template-default-directory directory)))
 
-(defun architect-plist-get (plist key)
-  "Return KEY value in PLIST."
-  (plist-get plist key))
-
 (defun architect-set-directory ()
   "Provide prompt to ask where the project will be created."
   (let* ((path
            (read-directory-name
              "Directory: "
              architect-template-default-directory)))
-    (setq path (concat (string-trim path nil "/") "/"))
+    (setq path (concat (string-trim-right path "/") "/"))
     (when (file-directory-p path)
       (setq path
         (concat path
@@ -148,7 +164,7 @@ This command is used in `template.el' file."
                   :input (concat "Destination " path)
                   :input-error "alphanumeric")))))
     (setq architect-template-destination
-          (string-trim path nil "/"))))
+          (string-trim-right path "/"))))
 
 (defun architect-set-variables ()
   "Fetch into `architect-template-variables' and execute prompt.
@@ -156,8 +172,8 @@ This function return an assosiative array that will be used to
 replace in template file."
   (let ((selector) (value) (after-function))
     (dolist (args architect-template-variables)
-      (setq selector (architect-plist-get args :variable)
-            after-function (architect-plist-get args :after-function)
+      (setq selector (plist-get args :variable)
+            after-function (plist-get args :after-function)
             value (architect-read-string args))
       (when after-function
         (setq value (funcall after-function value)))
@@ -200,8 +216,8 @@ recursively."
 (defun architect-commit ()
   "Fetch `architect-template-commits' and stage file to commit them."
   (dolist (commit architect-template-commits)
-    (let ((stage (architect-plist-get commit :add))
-          (message (architect-plist-get commit :message)))
+    (let ((stage (plist-get commit :add))
+          (message (plist-get commit :message)))
       (shell-command-to-string
         (format "git add %s" stage))
       (shell-command-to-string
@@ -232,9 +248,9 @@ This function is executed after `architect' function prompt."
   "Provide string input by defined PLIST.
 It require an non-empty string before to return it."
   (let ((answer) (valid) (prompt-text) (prompt-error-text)
-        (input (architect-plist-get plist :input))
-        (input-error (architect-plist-get plist :input-error))
-        (regex (architect-plist-get plist :regex)))
+        (input (plist-get plist :input))
+        (input-error (plist-get plist :input-error))
+        (regex (plist-get plist :regex)))
     (unless regex (setq regex ".+"))
     (unless input-error (setq input-error "require"))
     (setq prompt-text (concat input ": ")
