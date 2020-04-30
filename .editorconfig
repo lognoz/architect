@@ -13,3 +13,8 @@ insert_final_newline = true
 
 [Makefile]
 indent_style = tab
+indent_size = 3
+
+[*.c]
+indent_style = tab
+indent_size = 3
