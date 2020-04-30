@@ -140,6 +140,9 @@ This function is expect to receive plist ARGS like :variable,
 (defun architect-define-commit (&rest args)
   "Define commits that will be fetch and be executed in `architect-commit'.
 This function is expect to receive plist ARGS like :add and :message."
+  (let ((error-prefix "Architect: architect-define-commit"))
+    (architect-validate-definition :add args 'string error-prefix)
+    (architect-validate-definition :message args 'string error-prefix))
   (setq architect-template-commits
         (append architect-template-commits (list args))))
 
