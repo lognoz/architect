@@ -186,8 +186,9 @@ This function expect to recive PATH argument."
     (make-directory directory t))
   (copy-directory path architect-template-destination))
 
-(defun architect-commit ()
+(defun architect-initialize-git ()
   "Fetch `architect-template-commits' and stage file to commit them."
+  (shell-command-to-string "git init .")
   (dolist (commit architect-template-commits)
     (let ((stage (plist-get commit :add))
           (message (plist-get commit :message)))
@@ -204,25 +205,6 @@ This function expect to recive PATH argument."
         (setq path (architect-replace-filename path))
         (when (file-directory-p path)
           (architect-rename-files path))))))
-
-(defun architect-create-project (template-name)
-  "Create project by argument TEMPLATE-NAME.
-This function is executed after `architect' function prompt."
-  (let* ((path (expand-file-name (concat architect-directory template-name))))
-    (architect-load-configuration path)
-    (architect-set-directory)
-    (architect-set-variables)
-    (architect-copy-template path)
-    (architect-rename-files architect-template-destination)
-    (let ((default-directory architect-template-destination))
-      (delete-file "architect.el")
-      (dolist (path (directory-files-recursively "." ""))
-        (unless (file-directory-p path)
-          (architect-apply-replacement path)))
-      (shell-command-to-string
-        (format "git init %s" architect-template-destination))
-      (architect-commit))
-    (dired architect-template-destination)))
 
 (defun architect-read-string (plist)
   "Provide string input by defined PLIST.
@@ -250,6 +232,25 @@ It require an non-empty string before to return it."
   (let ((candidates (architect-template-candidates)))
     (list (completing-read "Create project: " candidates nil t))))
 
+(defun architect-create-project (template-name)
+  "Create project by argument TEMPLATE-NAME.
+This function is executed after `architect' function prompt."
+  (let* ((path (expand-file-name (concat architect-directory template-name))))
+    (architect-load-configuration path)
+    (architect-set-directory)
+    (architect-set-variables)
+    (architect-copy-template path)
+    (architect-rename-files architect-template-destination)
+    (let ((default-directory architect-template-destination))
+      (delete-file "architect.el")
+      (dolist (path (directory-files-recursively "." ""))
+        (unless (file-directory-p path)
+          (message (format "Replace variables in %s" path))
+          (architect-apply-replacement path)))
+      (architect-initialize-git))
+    (dired architect-template-destination)
+    (message "")))
+
 ;;; External Architect functions.
 
 ;;;###autoload
@@ -271,7 +272,7 @@ This function is expect to receive plist ARGS like :variable,
 
 ;;;###autoload
 (defun architect-define-commit (&rest args)
-  "Define commits that will be fetch and be executed in `architect-commit'.
+  "Define commits that will be executed into `architect-initialize-git'.
 This function is expect to receive plist ARGS like :add and :message."
   (let ((error-prefix "Architect: architect-define-commit"))
     (architect-validate-definition :add args 'string error-prefix)
