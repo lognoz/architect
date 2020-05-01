@@ -50,6 +50,18 @@
     :input "filename"
     :after-function 'downcase))
 
+(ert-deftest architect-define-commit/variable-unexpected-type ()
+  :expected-result :failed
+  (architect-define-commit
+    :add "."
+    :message 2))
+
+(ert-deftest architect-define-commit/success ()
+  :expected-result :passed
+  (architect-define-commit
+    :add "."
+    :message "Add initial commit"))
+
 (provide 'architect-test)
 
 ;;; architect-test.el ends here
