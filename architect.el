@@ -35,9 +35,10 @@
 
 ;;; Code:
 
+(require 'cl-lib)
 (require 'subr-x)
 
-;;; Contextual Architect constant.
+;;; Contextual constant.
 
 (defgroup achitect nil
   "Provide functionality to create project template quickly."
@@ -67,10 +68,13 @@
   "The list of template variables.")
 
 (defvar architect-template-replacements nil
-  "The list of template replatement.")
+  "The list of template replacements.")
 
 (defvar architect-template-commits nil
   "The list of template commits.")
+
+(defvar architect-template-shell-command nil
+  "The list of template shell command.")
 
 (defvar architect-template-destination nil
   "The destination directory template.")
@@ -78,9 +82,28 @@
 (defvar architect-template-default-directory nil
   "The template default directory.")
 
-;;; Internal Architect functions.
+(defvar architect-variable-keywords
+  '((:variable :type "string" :require t)
+    (:after-function :type "symbol" :function t)
+    (:input :type "string")
+    (:input-error :type "string")
+    (:regex :type "string")
+    (:value :type "string"))
+  "The available keywords in `architect-variable' function.")
 
-(defun architect-validate-directory ()
+(defvar architect-commit-keywords
+  '((:message :type "string" :require t)
+    (:add :type "string" :require t))
+  "The available keywords in `architect-commit' function.")
+
+(defvar architect-shell-command-keywords
+  '((:command :type "string" :require t)
+    (:before :type "string" :in ("commit" "replacement")))
+  "The available keywords in `architect-shell-command' function.")
+
+;;; Internal functions.
+
+(defun architect--validate-directory ()
   "Check if the user given directory is valid."
   (let ((directory architect-directory))
     (unless (stringp directory)
@@ -90,10 +113,10 @@
       (error "Directory %S does not exist" directory))
     (setq architect-directory directory)))
 
-(defun architect-template-candidates ()
+(defun architect--template-candidates ()
   "Provide candidates to `architect' prompt.
 Return a list of directories located into `architect-directory'."
-  (architect-validate-directory)
+  (architect--validate-directory)
   (let ((list))
     (dolist (f (directory-files architect-directory))
       (let ((path (concat architect-directory f)))
@@ -104,25 +127,14 @@ Return a list of directories located into `architect-directory'."
           (push (file-name-nondirectory path) list))))
     list))
 
-(defun architect-load-configuration (path)
+(defun architect--load-configuration (path)
   "This function load project configuration by PATH."
   (let ((path (concat path "/architect.el")))
     (if (file-exists-p path)
         (load path nil 'nomessage)
       (error (format "File '%s' not found." path)))))
 
-(defun architect-validate-definition (key args type &optional error-prefix null-allowed)
-  "Throw error if given KEY in ARGS is valid or not.
-This function checks if value is the same as TYPE argument.
-If it's not it print an error message based on ERROR-PREFIX.
-It skips the validation if NULL-ALLOWED is true."
-  (let ((value (plist-get args key)))
-    (when (and (not null-allowed) (not value))
-      (error (format "%s expects to receive %s" error-prefix key)))
-    (when (and value (not (equal (type-of value) type)))
-      (error (format "%s expects %s to be a %s" error-prefix key type)))))
-
-(defun architect-set-directory ()
+(defun architect--set-directory ()
   "Provide prompt to ask where the project will be created."
   (let* ((path
            (read-directory-name
@@ -132,14 +144,14 @@ It skips the validation if NULL-ALLOWED is true."
     (when (file-directory-p path)
       (setq path
         (concat path
-          (architect-read-string
+          (architect--read-string
             (list :regex "^[-_A-Za-z0-9]+$"
                   :input (concat "Destination " path)
                   :input-error "alphanumeric")))))
     (setq architect-template-destination
           (string-trim-right path "/"))))
 
-(defun architect-set-variables ()
+(defun architect--set-variables ()
   "Fetch into `architect-template-variables' and execute prompt.
 This function return an assosiative array that will be used to
 replace in template file."
@@ -149,12 +161,12 @@ replace in template file."
             after-function (plist-get args :after-function)
             value (plist-get args :value))
       (unless value
-        (setq value (architect-read-string args)))
+        (setq value (architect--read-string args)))
       (when after-function
         (setq value (funcall after-function value)))
       (push (cons selector value) architect-template-replacements))))
 
-(defun architect-replace-filename (path)
+(defun architect--replace-filename (path)
   "Apply filename replacement based on template variables.
 This function expect to recive a PATH that will be used to fetch
 recursively."
@@ -169,7 +181,7 @@ recursively."
           (rename-file path return-path))))
     return-path))
 
-(defun architect-apply-replacement (file)
+(defun architect--apply-replacement (file)
   "Scan FILE content to apply replacement based on template variables."
   (with-temp-file file
     (insert-file-contents-literally file)
@@ -179,14 +191,14 @@ recursively."
         (replace-match (cdr replacement)))
       replacement)))
 
-(defun architect-copy-template (path)
+(defun architect--copy-template (path)
   "Create directory recursively and copy template content.
 This function expect to recive PATH argument."
   (let ((directory (file-name-directory architect-template-destination)))
     (make-directory directory t))
   (copy-directory path architect-template-destination))
 
-(defun architect-initialize-git ()
+(defun architect--initialize-git ()
   "Fetch `architect-template-commits' and stage file to commit them."
   (shell-command-to-string "git init .")
   (dolist (commit architect-template-commits)
@@ -197,16 +209,16 @@ This function expect to recive PATH argument."
       (shell-command-to-string
         (format "git commit -m \"%s\"" message)))))
 
-(defun architect-rename-files (directory)
+(defun architect--rename-files (directory)
   "Rename files in DIRECTORY by replacing variables define in path."
   (dolist (f (directory-files directory))
     (unless (or (equal f ".") (equal f ".."))
       (let ((path (concat directory "/" f)))
-        (setq path (architect-replace-filename path))
+        (setq path (architect--replace-filename path))
         (when (file-directory-p path)
-          (architect-rename-files path))))))
+          (architect--rename-files path))))))
 
-(defun architect-read-string (plist)
+(defun architect--read-string (plist)
   "Provide string input by defined PLIST.
 It require an non-empty string before to return it."
   (let ((answer) (valid) (prompt-text) (prompt-error-text)
@@ -227,62 +239,99 @@ It require an non-empty string before to return it."
         (setq prompt-text prompt-error-text)))
     answer))
 
-(defun architect-completing-read ()
+(defun architect--completing-read ()
   "Read and return a template name."
-  (let ((candidates (architect-template-candidates)))
+  (let ((candidates (architect--template-candidates)))
     (list (completing-read "Create project: " candidates nil t))))
 
-(defun architect-create-project (template-name)
+(defun architect--validate (args keywords prefix-error)
+  "Throw error if given KEY in ARGS is valid or not.
+This function checks if value is the same as TYPE argument.
+If it's not it print an error message based on ERROR-PREFIX.
+It skips the validation if NULL-ALLOWED is true."
+  (dolist (parameters keywords)
+    (let* ((keyword (car parameters))
+           (validation (cdr parameters))
+           (value (plist-get args keyword))
+           (type-expected (plist-get validation :type))
+           (type-value (symbol-name (type-of value))))
+      (when (and (plist-get validation :require) (not value))
+        (error (format "%s expects to receive %s" prefix-error keyword)))
+      (when (and value (not (equal type-value type-expected)))
+        (error (format "%s expects %s to be a %s" prefix-error keyword type-expected)))
+      (when (and value (plist-get validation :function) (not (fboundp value)))
+        (error (format "%s can't found '%s' function in %s"
+                       prefix-error (symbol-name value) keyword)))
+      (let ((whitelist (plist-get validation :in)))
+        (when (and value whitelist (not (cl-position value whitelist :test 'equal)))
+          (error (format "%s %s expects to receive %s"
+                         prefix-error keyword
+                        (mapconcat 'identity whitelist " or "))))))))
+
+(defun architect--execute-shell-command (&optional before)
+  (dolist (process architect-template-shell-command)
+    (let ((command (plist-get process :command))
+          (execute-before (plist-get process :before)))
+      (when (equal execute-before before)
+        (shell-command command)))))
+
+(defun architect--create-project (template-name)
   "Create project by argument TEMPLATE-NAME.
 This function is executed after `architect' function prompt."
   (let* ((path (expand-file-name (concat architect-directory template-name))))
-    (architect-load-configuration path)
-    (architect-set-directory)
-    (architect-set-variables)
-    (architect-copy-template path)
-    (architect-rename-files architect-template-destination)
+    (architect--load-configuration path)
+    (architect--set-directory)
+    (architect--set-variables)
+    (architect--copy-template path)
     (let ((default-directory architect-template-destination))
+      (architect--execute-shell-command "replacement")
+      (architect--rename-files architect-template-destination)
       (delete-file "architect.el")
       (dolist (path (directory-files-recursively "." ""))
         (unless (file-directory-p path)
           (message (format "Replace variables in %s" path))
-          (architect-apply-replacement path)))
-      (architect-initialize-git))
+          (architect--apply-replacement path)))
+      (architect--execute-shell-command "commit")
+      (architect--initialize-git)
+      (architect--execute-shell-command))
     (dired architect-template-destination)
     (message "")))
 
 ;;; External Architect functions.
 
 ;;;###autoload
-(defun architect-define-variable (&rest args)
-  "Define variables that will be fetch in `architect-set-variables'.
-This function is expect to receive plist ARGS like :variable,
-:regex, :input, :input-error, :after-function and :value."
-  (let ((error-prefix "Architect: architect-define-variable"))
-    (architect-validate-definition :variable args 'string error-prefix)
-    (architect-validate-definition :after-function args 'symbol error-prefix t)
+(defun architect-variable (&rest args)
+  "Define variables that will be fetch in `architect--set-variables'."
+  (let ((prefix-error "Architect: architect-variable"))
+    (architect--validate args architect-variable-keywords prefix-error)
     (let ((value (plist-get args :value))
           (input (plist-get args :input)))
-      (when (or (and (not value) (not input)) (and value input))
-        (error (format "%s expects to receive :input or :value" error-prefix))))
-    (dolist (key '(:value :regex :input :input-error))
-      (architect-validate-definition key args 'string error-prefix t)))
-  (setq architect-template-variables
-        (append architect-template-variables (list args))))
+      (when (or (and (not value) (not input))
+                (and value input))
+        (error (format "%s expects to receive :input or :value" prefix-error))))
+    (setq architect-template-variables
+          (append architect-template-variables (list args)))))
 
 ;;;###autoload
-(defun architect-define-commit (&rest args)
-  "Define commits that will be executed into `architect-initialize-git'.
-This function is expect to receive plist ARGS like :add and :message."
-  (let ((error-prefix "Architect: architect-define-commit"))
-    (architect-validate-definition :add args 'string error-prefix)
-    (architect-validate-definition :message args 'string error-prefix))
+(defun architect-commit (&rest args)
+  "Define commits that will be executed into `architect--initialize-git'."
+  (let ((prefix-error "Architect: architect-commit"))
+    (architect--validate args architect-commit-keywords prefix-error))
   (setq architect-template-commits
         (append architect-template-commits (list args))))
 
 ;;;###autoload
-(defun architect-define-default-directory (directory)
-  "Define DIRECTORY that will be used in `architect-set-directory'.
+(defun architect-shell-command (&rest args)
+  "Define shell command that will be executed into `architect--execute-command'.
+This function is expect to receive plist ARGS :command and :before."
+  (let ((prefix-error "Architect: architect-shell-command"))
+    (architect--validate args architect-shell-command-keywords prefix-error))
+  (setq architect-template-shell-command
+        (append architect-template-shell-command (list args))))
+
+;;;###autoload
+(defun architect-default-directory (directory)
+  "Define DIRECTORY that will be used in `architect--set-directory'.
 This command is used in `architect.el' template file."
   (when (file-directory-p directory)
     (setq architect-template-default-directory directory)))
@@ -292,12 +341,13 @@ This command is used in `architect.el' template file."
   "Provide functionality to create project quickly.
 This function provide a prompt to choose which TEMPLATE you want
 to create."
-  (interactive (architect-completing-read))
+  (interactive (architect--completing-read))
   (setq architect-template-variables nil
         architect-template-replacements nil
         architect-template-commits nil
+        architect-template-shell-command nil
         architect-template-default-directory nil)
-  (architect-create-project template))
+  (architect--create-project template))
 
 (provide 'architect)
 
