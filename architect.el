@@ -273,7 +273,7 @@ It skips the validation if NULL-ALLOWED is true."
     (let ((command (plist-get process :command))
           (execute-before (plist-get process :before)))
       (when (equal execute-before before)
-        (shell-command command)))))
+        (shell-command-to-string command)))))
 
 (defun architect--create-project (template-name)
   "Create project by argument TEMPLATE-NAME.
@@ -301,7 +301,19 @@ This function is executed after `architect' function prompt."
 
 ;;;###autoload
 (defun architect-variable (&rest args)
-  "Define variables that will be fetch in `architect--set-variables'."
+  "Define variables that will be fetch in `architect--set-variables'.
+
+  (architect-variable
+     [:keyword [option]]...)
+
+:variable        String used to be replace with the value.
+:value           String used as `:variable' replacement.
+:after-function  Symbol of a function executed after user define the value.
+
+:input           String that will be used as label. If input is defined, its
+                 mean that Architect will provide a prompt to the user.
+:input-error     String used as prompt error if it's not valid.
+:regex           String regex used to check if the value is valid or not."
   (let ((prefix-error "Architect: architect-variable"))
     (architect--validate args architect-variable-keywords prefix-error)
     (let ((value (plist-get args :value))
@@ -314,7 +326,13 @@ This function is executed after `architect' function prompt."
 
 ;;;###autoload
 (defun architect-commit (&rest args)
-  "Define commits that will be executed into `architect--initialize-git'."
+  "Define commits that will be executed into `architect--initialize-git'.
+
+  (architect-commit
+     [:keyword [option]]...)
+
+:add      String used in git command to stage changes.
+:message  String used in git command to commit staged changes."
   (let ((prefix-error "Architect: architect-commit"))
     (architect--validate args architect-commit-keywords prefix-error))
   (setq architect-template-commits
@@ -323,7 +341,12 @@ This function is executed after `architect' function prompt."
 ;;;###autoload
 (defun architect-shell-command (&rest args)
   "Define shell command that will be executed into `architect--execute-command'.
-This function is expect to receive plist ARGS :command and :before."
+
+  (architect-shell-command
+     [:keyword [option]]...)
+
+:command  String used as shell command.
+:before   Reference of the step user want to execute the shell command."
   (let ((prefix-error "Architect: architect-shell-command"))
     (architect--validate args architect-shell-command-keywords prefix-error))
   (setq architect-template-shell-command
