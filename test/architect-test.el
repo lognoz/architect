@@ -27,40 +27,52 @@
 (require 'ert)
 (require 'architect)
 
-(ert-deftest architect-define-variable/variable-absent ()
+(ert-deftest architect-variable/variable-absent ()
   :expected-result :failed
-  (architect-define-variable))
+  (architect-variable))
 
-(ert-deftest architect-define-variable/variable-unexpected-type ()
+(ert-deftest architect-variable/variable-unexpected-type ()
   :expected-result :failed
-  (architect-define-variable
+  (architect-variable
     :variable t))
 
-(ert-deftest architect-define-variable/after-function-unexpected-type ()
+(ert-deftest architect-variable/after-function-unexpected-type ()
   :expected-result :failed
-  (architect-define-variable
+  (architect-variable
     :variable "__filename__"
     :input "filename"
     :after-function "function"))
 
-(ert-deftest architect-define-variable/success ()
+(ert-deftest architect-variable/success ()
   :expected-result :passed
-  (architect-define-variable
+  (architect-variable
     :variable "__filename__"
     :input "filename"
     :after-function 'downcase))
 
-(ert-deftest architect-define-commit/variable-unexpected-type ()
+(ert-deftest architect-commit/message-unexpected-type ()
   :expected-result :failed
-  (architect-define-commit
+  (architect-commit
     :add "."
     :message 2))
 
-(ert-deftest architect-define-commit/success ()
+(ert-deftest architect-commit/success ()
   :expected-result :passed
-  (architect-define-commit
+  (architect-commit
     :add "."
     :message "Add initial commit"))
+
+(ert-deftest architect-shell-command/success ()
+  :expected-result :passed
+  (architect-shell-command
+    :command "touch a"
+    :before "commit"))
+
+(ert-deftest architect-shell-command/before-unexpected-value ()
+  :expected-result :failed
+  (architect-shell-command
+    :command "touch a"
+    :before "not-commit"))
 
 (provide 'architect-test)
 
