@@ -1,6 +1,6 @@
 ;; template.el --- Architect Template Example -*- lexical-binding: t; -*-
 
-(architect-default-directory "~/document")
+(architect-default-directory "~/")
 
 (architect-variable
   :variable "__date__"
