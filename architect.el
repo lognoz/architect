@@ -244,12 +244,11 @@ It require an non-empty string before to return it."
   (let ((candidates (architect--template-candidates)))
     (list (completing-read "Create project: " candidates nil t))))
 
-(defun architect--validate (args keywords prefix-error)
-  "Throw error if given KEY in ARGS is valid or not.
+(defun architect--validate (args validation prefix-error)
+  "Throw error if given ARGS didn't pass the VALIDATION.
 This function checks if value is the same as TYPE argument.
-If it's not it print an error message based on ERROR-PREFIX.
-It skips the validation if NULL-ALLOWED is true."
-  (dolist (parameters keywords)
+If it's not it print an error message based on PREFIX-ERROR."
+  (dolist (parameters validation)
     (let* ((keyword (car parameters))
            (validation (cdr parameters))
            (value (plist-get args keyword))
@@ -269,6 +268,9 @@ It skips the validation if NULL-ALLOWED is true."
                         (mapconcat 'identity whitelist " or "))))))))
 
 (defun architect--execute-shell-command (&optional before)
+  "Fetch `architect-template-shell-command' and execute define script.
+This function receive BEFORE argument to restrict when to apply
+the shell command."
   (dolist (process architect-template-shell-command)
     (let ((command (plist-get process :command))
           (execute-before (plist-get process :before)))
@@ -301,17 +303,18 @@ This function is executed after `architect' function prompt."
 
 ;;;###autoload
 (defun architect-variable (&rest args)
-  "Define variables that will be fetch in `architect--set-variables'.
+  "Define variable that will be fetch in `architect--set-variables'.
 
   (architect-variable
-     [:keyword [option]]...)
+     [:keyword [ARGS]]...)
 
 :variable        String used to be replace with the value.
 :value           String used as `:variable' replacement.
 :after-function  Symbol of a function executed after user define the value.
 
-:input           String that will be used as label. If input is defined, its
-                 mean that Architect will provide a prompt to the user.
+:input           String that will be used as label.
+                 If input is defined, its mean that Architect will provide
+                 a prompt to the user.
 :input-error     String used as prompt error if it's not valid.
 :regex           String regex used to check if the value is valid or not."
   (let ((prefix-error "Architect: architect-variable"))
@@ -326,10 +329,10 @@ This function is executed after `architect' function prompt."
 
 ;;;###autoload
 (defun architect-commit (&rest args)
-  "Define commits that will be executed into `architect--initialize-git'.
+  "Define commit that will be executed into `architect--initialize-git'.
 
   (architect-commit
-     [:keyword [option]]...)
+     [:keyword [ARGS]]...)
 
 :add      String used in git command to stage changes.
 :message  String used in git command to commit staged changes."
@@ -343,7 +346,7 @@ This function is executed after `architect' function prompt."
   "Define shell command that will be executed into `architect--execute-command'.
 
   (architect-shell-command
-     [:keyword [option]]...)
+     [:keyword [ARGS]]...)
 
 :command  String used as shell command.
 :before   Reference of the step user want to execute the shell command."
