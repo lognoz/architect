@@ -6,7 +6,7 @@
 ;; Homepage: https://github.com/lognoz/architect
 ;; Keywords: project architect
 ;; Package-Version: 0.1
-;; Package-Requires: ((emacs "26.3"))
+;; Package-Requires: ((emacs "26.1"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -106,20 +106,20 @@
 
 ;;; Internal functions.
 
-(defun architect--validate-directory ()
-  "Check if the user given directory is valid."
-  (let ((directory architect-directory))
-    (unless (stringp directory)
-      (error (format "Variable architect-directory malformed, value need to be a string")))
-    (setq directory (concat (string-trim-right directory "/") "/"))
+(defun architect--get-directory (directory variable)
+  "Return formatted DIRECTORY if it's valid.
+This function expected to recive VARIABLE name for error."
+  (unless (stringp directory)
+    (error "Variable %s malformed, value need to be a string" variable))
+  (let ((directory (concat (string-trim-right directory "/") "/")))
     (unless (file-directory-p directory)
-      (error "Directory %S does not exist" directory))
-    (setq architect-directory directory)))
+      (error "Directory %s does not exist" directory))
+    directory))
 
 (defun architect--template-candidates ()
   "Provide candidates to `architect' prompt.
 Return a list of directories located into `architect-directory'."
-  (architect--validate-directory)
+  (setq architect-directory (architect--get-directory architect-directory "architect-directory"))
   (let ((list))
     (dolist (f (directory-files architect-directory))
       (let ((path (concat architect-directory f)))
@@ -258,17 +258,17 @@ If it's not it print an error message based on PREFIX-ERROR."
            (type-expected (plist-get validation :type))
            (type-value (symbol-name (type-of value))))
       (when (and (plist-get validation :require) (not value))
-        (error (format "%s expects to receive %s" prefix-error keyword)))
+        (error "%s expects to receive %s" prefix-error keyword))
       (when (and value (not (equal type-value type-expected)))
-        (error (format "%s expects %s to be a %s" prefix-error keyword type-expected)))
+        (error "%s expects %s to be a %s" prefix-error keyword type-expected))
       (when (and value (plist-get validation :function) (not (fboundp value)))
-        (error (format "%s can't found '%s' function in %s"
-                       prefix-error (symbol-name value) keyword)))
+        (error "%s can't found '%s' function in %s"
+               prefix-error (symbol-name value) keyword))
       (let ((whitelist (plist-get validation :in)))
         (when (and value whitelist (not (cl-position value whitelist :test 'equal)))
-          (error (format "%s %s expects to receive %s"
-                         prefix-error keyword
-                        (mapconcat 'identity whitelist " or "))))))))
+          (error "%s %s expects to receive %s"
+                 prefix-error keyword
+                 (mapconcat 'identity whitelist " or ")))))))
 
 (defun architect--execute-shell-command (&optional before)
   "Fetch `architect-template-shell-command' and execute define script.
@@ -365,7 +365,7 @@ This function is executed after `architect' function prompt."
 (defun architect-default-directory (directory)
   "Define DIRECTORY that will be used in `architect--set-directory'.
 This command is used in `architect.el' template file."
-  (when (file-directory-p directory)
+  (let ((directory (architect--get-directory directory "architect-default-directory")))
     (setq architect-template-default-directory directory)))
 
 ;;;###autoload
