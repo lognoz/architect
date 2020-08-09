@@ -88,6 +88,7 @@
 (defvar architect-variable-keywords
   '((:variable        :type "string"  :require t)
     (:after-function  :type "symbol"  :function t)
+    (:prompt          :type "symbol"  :function t  :in (yes-or-no-p y-or-n-p))
     (:candidates      :type "cons")
     (:input           :type "string")
     (:input-error     :type "string")
@@ -155,29 +156,38 @@ Return a list of directories located into `architect-directory'."
           (string-trim-right path "/"))))
 
 (defun architect--read-choice (plist)
-  "Provide selector input by defined PLIST."
+  "Provide selector input defined in PLIST."
   (let* ((input (plist-get plist :input))
          (candidates (plist-get plist :candidates))
          (prompt-text (concat input ": ")))
     (completing-read prompt-text candidates nil t)))
 
+(defun architect--read-prompt (plist)
+  "Provide prompt input defined in PLIST."
+  (let ((prompt (plist-get plist :prompt))
+        (input (plist-get plist :input)))
+    (funcall prompt input)))
+
 (defun architect--set-variables ()
   "Fetch into `architect-template-variables' and execute prompt.
 This function return an assosiative array that will be used to
 replace in template file."
-  (let ((selector) (after-function) (value) (candidates))
+  (let ((selector) (after-function) (value) (candidates) (prompt))
     (dolist (args architect-template-variables)
       (setq selector (plist-get args :variable)
-            candidates (plist-get args :candidates)
             after-function (plist-get args :after-function)
+            candidates (plist-get args :candidates)
+            prompt (plist-get args :prompt)
             value (plist-get args :value))
       (if (and value (equal (type-of value) 'symbol))
           (setq value (funcall value))
         (unless value
-          (setq value
-            (if candidates
-                (architect--read-choice args)
-              (architect--read-string args)))))
+          (setq value (cond
+                       (candidates
+                        (architect--read-choice args))
+                       (prompt
+                        (architect--read-prompt args))
+                       (t (architect--read-string args))))))
       (when after-function
         (setq value (funcall after-function value)))
       (push (cons selector value) architect-template-replacements))))
@@ -286,7 +296,10 @@ If it's not it print an error message based on PREFIX-ERROR."
         (when (and value whitelist (not (cl-position value whitelist :test 'equal)))
           (error "%s %s expects to receive %s"
                  prefix-error keyword
-                 (mapconcat 'identity whitelist " or ")))))))
+                 (mapconcat (if (equal type-expected "symbol")
+                                'symbol-name
+                              'identity)
+                            whitelist " or ")))))))
 
 (defun architect--execute-shell-command (&optional before)
   "Fetch `architect-template-shell-command' and execute define script.
