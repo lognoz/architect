@@ -348,6 +348,7 @@ This function is executed after `architect' function prompt."
 :variable        String used to be replace with the value.
 :value           String used as `:variable' replacement.
 :after-function  Symbol of a function executed after user define the value.
+:prompt          Symbol of a prompt function like `yes-or-no-p'.
 :candidates      Cons used as candidates in `completing-read' function.
 :input           String that will be used as label.
                  If input is defined, its mean that Architect will provide
