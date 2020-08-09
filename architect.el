@@ -64,6 +64,9 @@
 (defconst architect-base-directory (file-name-directory load-file-name)
   "The directory Architect was loaded from.")
 
+(defconst architect-shell-buffer "*architect*"
+  "The buffer used to execute async-shell-command.")
+
 (defvar architect-template-variables nil
   "The list of template variables.")
 
@@ -275,7 +278,10 @@ the shell command."
     (let ((command (plist-get process :command))
           (execute-before (plist-get process :before)))
       (when (equal execute-before before)
-        (shell-command-to-string command)))))
+        (async-shell-command command architect-shell-buffer)
+        (let ((process (get-buffer-process "*architect*")))
+            (while (process-live-p process)
+              (sit-for 0.2)))))))
 
 (defun architect--create-project (template-name)
   "Create project by argument TEMPLATE-NAME.
