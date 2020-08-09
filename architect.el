@@ -91,8 +91,7 @@
     (:candidates      :type "cons")
     (:input           :type "string")
     (:input-error     :type "string")
-    (:regex           :type "string")
-    (:value           :type "string"))
+    (:regex           :type "string"))
   "The available keywords in `architect-variable' function.")
 
 (defvar architect-commit-keywords
@@ -172,10 +171,13 @@ replace in template file."
             candidates (plist-get args :candidates)
             after-function (plist-get args :after-function)
             value (plist-get args :value))
-      (unless value
-        (setq value (if candidates
-                        (architect--read-choice args)
-                      (architect--read-string args))))
+      (if (and value (equal (type-of value) 'symbol))
+          (setq value (funcall value))
+        (unless value
+          (setq value
+            (if candidates
+                (architect--read-choice args)
+              (architect--read-string args)))))
       (when after-function
         (setq value (funcall after-function value)))
       (push (cons selector value) architect-template-replacements))))
@@ -383,6 +385,11 @@ This function is executed after `architect' function prompt."
 This command is used in `architect.el' template file."
   (let ((directory (architect--get-directory directory "architect-default-directory")))
     (setq architect-template-default-directory directory)))
+
+;;;###autoload
+(defun architect-get (name)
+  "Return variable value by NAME."
+  (alist-get name architect-template-replacements))
 
 ;;;###autoload
 (defun architect (template)
