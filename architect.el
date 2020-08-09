@@ -86,22 +86,23 @@
   "The template default directory.")
 
 (defvar architect-variable-keywords
-  '((:variable :type "string" :require t)
-    (:after-function :type "symbol" :function t)
-    (:input :type "string")
-    (:input-error :type "string")
-    (:regex :type "string")
-    (:value :type "string"))
+  '((:variable        :type "string"  :require t)
+    (:after-function  :type "symbol"  :function t)
+    (:candidates      :type "cons")
+    (:input           :type "string")
+    (:input-error     :type "string")
+    (:regex           :type "string")
+    (:value           :type "string"))
   "The available keywords in `architect-variable' function.")
 
 (defvar architect-commit-keywords
-  '((:message :type "string" :require t)
-    (:add :type "string" :require t))
+  '((:message  :type "string"  :require t)
+    (:add      :type "string"  :require t))
   "The available keywords in `architect-commit' function.")
 
 (defvar architect-shell-command-keywords
-  '((:command :type "string" :require t)
-    (:before :type "string" :in ("commit" "replacement")))
+  '((:command  :type "string"  :require t)
+    (:before   :type "string"  :in ("commit" "replacement")))
   "The available keywords in `architect-shell-command' function.")
 
 ;;; Internal functions.
@@ -154,17 +155,27 @@ Return a list of directories located into `architect-directory'."
     (setq architect-template-destination
           (string-trim-right path "/"))))
 
+(defun architect--read-choice (plist)
+  "Provide selector input by defined PLIST."
+  (let* ((input (plist-get plist :input))
+         (candidates (plist-get plist :candidates))
+         (prompt-text (concat input ": ")))
+    (completing-read prompt-text candidates nil t)))
+
 (defun architect--set-variables ()
   "Fetch into `architect-template-variables' and execute prompt.
 This function return an assosiative array that will be used to
 replace in template file."
-  (let ((selector) (after-function) (value))
+  (let ((selector) (after-function) (value) (candidates))
     (dolist (args architect-template-variables)
       (setq selector (plist-get args :variable)
+            candidates (plist-get args :candidates)
             after-function (plist-get args :after-function)
             value (plist-get args :value))
       (unless value
-        (setq value (architect--read-string args)))
+        (setq value (if candidates
+                        (architect--read-choice args)
+                      (architect--read-string args))))
       (when after-function
         (setq value (funcall after-function value)))
       (push (cons selector value) architect-template-replacements))))
@@ -228,8 +239,10 @@ It require an non-empty string before to return it."
         (input (plist-get plist :input))
         (input-error (plist-get plist :input-error))
         (regex (plist-get plist :regex)))
-    (unless regex (setq regex ".+"))
-    (unless input-error (setq input-error "require"))
+    (unless regex
+      (setq regex ".+"))
+    (unless input-error
+      (setq input-error "require"))
     (setq prompt-text (concat input ": ")
           prompt-error-text
             (format "%s (%s): " input
@@ -257,13 +270,16 @@ If it's not it print an error message based on PREFIX-ERROR."
            (value (plist-get args keyword))
            (type-expected (plist-get validation :type))
            (type-value (symbol-name (type-of value))))
-      (when (and (plist-get validation :require) (not value))
-        (error "%s expects to receive %s" prefix-error keyword))
-      (when (and value (not (equal type-value type-expected)))
-        (error "%s expects %s to be a %s" prefix-error keyword type-expected))
-      (when (and value (plist-get validation :function) (not (fboundp value)))
-        (error "%s can't found '%s' function in %s"
-               prefix-error (symbol-name value) keyword))
+      (cond
+        ((and (plist-get validation :require) (not value)
+          (error "%s expects to receive %s" prefix-error keyword)))
+        ((and value (not (equal type-value type-expected))
+          (error "%s expects %s to be a %s" prefix-error keyword type-expected)))
+        ((and (equal type-expected "cons") (plist-member args keyword) (< (length value) 1)
+          (error "%s expects %s to receive candidates" prefix-error keyword)))
+        ((and value (plist-get validation :function) (not (fboundp value))
+          (error "%s can't found '%s' function in %s"
+                 prefix-error (symbol-name value) keyword))))
       (let ((whitelist (plist-get validation :in)))
         (when (and value whitelist (not (cl-position value whitelist :test 'equal)))
           (error "%s %s expects to receive %s"
@@ -317,7 +333,7 @@ This function is executed after `architect' function prompt."
 :variable        String used to be replace with the value.
 :value           String used as `:variable' replacement.
 :after-function  Symbol of a function executed after user define the value.
-
+:candidates      Cons used as candidates in `completing-read' function.
 :input           String that will be used as label.
                  If input is defined, its mean that Architect will provide
                  a prompt to the user.
