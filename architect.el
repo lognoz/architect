@@ -65,7 +65,7 @@
   "The directory Architect was loaded from.")
 
 (defconst architect-shell-buffer "*architect*"
-  "The buffer used to execute async-shell-command.")
+  "The buffer used in `async-shell-command' function.")
 
 (defvar architect-template-variables nil
   "The list of template variables.")
