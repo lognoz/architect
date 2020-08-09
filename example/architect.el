@@ -1,4 +1,4 @@
-;; template.el --- Architect Template Example -*- lexical-binding: t; -*-
+;; architect.el --- Architect Example Template -*- lexical-binding: t; -*-
 
 (architect-default-directory "~/")
 
