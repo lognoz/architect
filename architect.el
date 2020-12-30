@@ -130,7 +130,11 @@
   "Return formatted DIRECTORY if it's valid.
 This function expected to recive VARIABLE name for error."
   (unless (stringp directory)
-    (error "Variable %s malformed, value need to be a string" variable))
+    (if (equal variable "architect-directory")
+        (if (y-or-n-p "Variable architect-directory need to be defined to finds templates. Use the example for now? ")
+            (setq directory architect-base-directory)
+          (error ""))
+      (error "Variable %s malformed, value need to be a string" variable)))
   (let ((directory (concat (string-trim-right directory "/") "/")))
     (unless (file-directory-p directory)
       (error "Directory %s does not exist" directory))
