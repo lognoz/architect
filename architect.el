@@ -5,8 +5,8 @@
 ;; Author: Marc-Antoine Loignon <developer@lognoz.org>
 ;; Homepage: https://github.com/lognoz/architect
 ;; Keywords: project architect
-;; Package-Version: 0.1
-;; Package-Requires: ((emacs "26.1"))
+;; Package-Version: 0.2.0
+;; Package-Requires: ((emacs "25.1"))
 
 ;; This file is not part of GNU Emacs.
 
@@ -66,6 +66,25 @@
 
 (defconst architect-shell-buffer "*architect*"
   "The buffer used in `async-shell-command' function.")
+
+(defvar architect-version
+  (eval-when-compile
+    (with-temp-buffer
+      (concat "0.2.0"
+        (let ((dir (file-name-directory (or load-file-name
+                                            byte-compile-current-file))))
+          ;; Git repository or running in batch mode
+          (if (and (file-exists-p (concat dir "/.git"))
+                  (ignore-errors
+                    (zerop (call-process "git" nil '(t nil) nil
+                                          "rev-parse"
+                                          "--short" "HEAD"))))
+              (progn
+                (goto-char (point-min))
+                (concat "-"
+                        (buffer-substring (point-min)
+                                          (line-end-position)))))))))
+  "The current version of Architect.")
 
 (defvar architect-template-variables nil
   "The list of template variables.")
@@ -337,6 +356,15 @@ This function is executed after `architect' function prompt."
     (message "")))
 
 ;;; External Architect functions.
+
+;;;###autoload
+(defun architect-version ()
+  "Print the current Architect version."
+  (interactive)
+  (message "Architect %s, Emacs %s, %s"
+           architect-version
+           emacs-version
+           system-type))
 
 ;;;###autoload
 (defun architect-variable (&rest args)
