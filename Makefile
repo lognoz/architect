@@ -1,23 +1,45 @@
 # See LICENSE file for copyright and license details.
 
-EMACS ?= emacs
-LOAD = -l architect.el -l test/architect-test.el
+EMACS?= emacs
+BATCH= $(EMACS) -Q --batch $(LOAD)
+LOAD= -L .
 
-all: compile test autoload checkdoc
+FILES= $(wildcard architect*.el)
+ELCFILES= $(FILES:.el=.elc)
 
-test:
-	$(EMACS) -batch $(LOAD) -f ert-run-tests-batch-and-exit
+$(ELCFILES): %.elc: %.el
+	@$(BATCH) -f batch-byte-compile $<
 
-compile:
-	$(EMACS) -batch -l make/compile.el
+all: checkdoc compile test autoload clean
 
-checkdoc:
-	$(EMACS) -batch -l make/checkdoc.el
+compile: $(ELCFILES)
 
 autoload:
-	$(EMACS) -batch -l make/autoload.el
+	@for f in $(FILES); do\
+		$(BATCH) --eval "(progn\
+		(let ((generated-autoload-file (expand-file-name \"autoload.el\")))\
+			(update-file-autoloads \""$${f}\"" t generated-autoload-file)))";\
+	done
+
+checkdoc:
+	@for f in $(FILES); do\
+		$(BATCH) --eval "(checkdoc-file \""$${f}\"")";\
+	done
 
 clean:
-	rm -f *.elc
+	@rm -f *~
+	@rm -f \#*\#
+	@rm -f *.elc
+	@rm -f autoload.el
 
-.PHONY: all test clean
+test:
+	@$(BATCH) --eval "(progn\
+	(load \"test/architect-test.el\" nil 'nomessage)\
+	(ert-run-tests-batch-and-exit))"
+
+version:
+	@$(BATCH) --eval "(progn\
+	(require 'architect)\
+	(architect-version))"
+
+.PHONY: all autoload checkdoc clean compile test version
