@@ -5,7 +5,7 @@
 ;; Author: Marc-Antoine Loignon <developer@lognoz.org>
 ;; Homepage: https://github.com/lognoz/architect
 ;; Keywords: project architect
-;; Package-Version: 0.2.0
+;; Package-Version: 0.2.1
 ;; Package-Requires: ((emacs "25.1"))
 
 ;; This file is not part of GNU Emacs.
@@ -70,20 +70,19 @@
 (defvar architect-version
   (eval-when-compile
     (with-temp-buffer
-      (concat "0.2.0"
+      (concat "0.2.1"
         (let ((dir (file-name-directory (or load-file-name
                                             byte-compile-current-file))))
-          ;; Git repository or running in batch mode
           (if (and (file-exists-p (concat dir "/.git"))
-                  (ignore-errors
-                    (zerop (call-process "git" nil '(t nil) nil
-                                          "rev-parse"
-                                          "--short" "HEAD"))))
-              (progn
-                (goto-char (point-min))
-                (concat "-"
-                        (buffer-substring (point-min)
-                                          (line-end-position)))))))))
+                (ignore-errors
+                  (zerop (call-process "git" nil '(t nil) nil
+                                       "rev-parse"
+                                       "--short" "HEAD"))))
+            (progn
+              (goto-char (point-min))
+              (concat "-"
+                (buffer-substring (point-min)
+                  (line-end-position)))))))))
   "The current version of Architect.")
 
 (defvar architect-template-variables nil
@@ -111,7 +110,8 @@
     (:candidates      :type "cons")
     (:input           :type "string")
     (:input-error     :type "string")
-    (:regex           :type "string"))
+    (:regex           :type "string")
+    (:default-value   :function t))
   "The available keywords in `architect-variable' function.")
 
 (defvar architect-commit-keywords
@@ -121,7 +121,9 @@
 
 (defvar architect-shell-command-keywords
   '((:command  :type "string"  :require t)
-    (:before   :type "string"  :in ("commit" "replacement")))
+    (:before   :type "string"  :in ("commit" "replacement"))
+    (:quiet    :type "symbol")
+    (:only-if  :function t))
   "The available keywords in `architect-shell-command' function.")
 
 ;;; Internal functions.
@@ -131,7 +133,7 @@
 This function expected to recive VARIABLE name for error."
   (unless (stringp directory)
     (if (equal variable "architect-directory")
-        (if (y-or-n-p "Variable architect-directory need to be defined to finds templates. Use the example for now? ")
+        (if (y-or-n-p "Variable architect-directory need to be defined to finds templates.  Use the example for now? ")
             (setq directory architect-base-directory)
           (error ""))
       (error "Variable %s malformed, value need to be a string" variable)))
@@ -270,10 +272,18 @@ This function expect to recive PATH argument."
 (defun architect--read-string (plist)
   "Provide string input by defined PLIST.
 It require an non-empty string before to return it."
-  (let ((answer) (valid) (prompt-text) (prompt-error-text)
-        (input (plist-get plist :input))
-        (input-error (plist-get plist :input-error))
-        (regex (plist-get plist :regex)))
+  (let* ((answer) (valid) (prompt-text) (prompt-error-text)
+         (default-value
+           (if (plist-member plist :default-value)
+               (funcall (plist-get plist :default-value))
+             ""))
+         (input
+           (concat
+             (plist-get plist :input)
+             (unless (equal default-value "")
+               (concat " (" default-value ")"))))
+         (input-error (plist-get plist :input-error))
+         (regex (plist-get plist :regex)))
     (unless regex
       (setq regex ".+"))
     (unless input-error
@@ -285,6 +295,8 @@ It require an non-empty string before to return it."
                                 'architect-error-face)))
     (while (not valid)
       (setq answer (string-trim (read-string prompt-text answer)))
+      (when (equal answer "")
+        (setq answer default-value))
       (if (string-match-p regex answer)
           (setq valid t)
         (setq prompt-text prompt-error-text)))
@@ -308,11 +320,11 @@ If it's not it print an error message based on PREFIX-ERROR."
       (cond
         ((and (plist-get validation :require) (not value)
           (error "%s expects to receive %s" prefix-error keyword)))
-        ((and value (not (equal type-value type-expected))
+        ((and value (and type-expected (not (equal type-value type-expected)))
           (error "%s expects %s to be a %s" prefix-error keyword type-expected)))
         ((and (equal type-expected "cons") (plist-member args keyword) (< (length value) 1)
           (error "%s expects %s to receive candidates" prefix-error keyword)))
-        ((and value (plist-get validation :function) (not (fboundp value))
+        ((and value (plist-get validation :function) (not (functionp value))
           (error "%s can't found '%s' function in %s"
                  prefix-error (symbol-name value) keyword))))
       (let ((whitelist (plist-get validation :in)))
@@ -331,11 +343,17 @@ the shell command."
   (dolist (process architect-template-shell-command)
     (let ((command (plist-get process :command))
           (execute-before (plist-get process :before)))
-      (when (equal execute-before before)
-        (async-shell-command command architect-shell-buffer)
-        (let ((process (get-buffer-process "*architect*")))
-            (while (process-live-p process)
-              (sit-for 0.2)))))))
+      (when (and (equal execute-before before)
+                 (if (plist-member process :only-if)
+                     (funcall (plist-get process :only-if))
+                   t))
+        (if (and (plist-member process :quiet)
+                 (equal (plist-get process :quiet) t))
+            (shell-command-to-string command)
+          (async-shell-command command architect-shell-buffer)
+          (let ((process (get-buffer-process "*architect*")))
+              (while (process-live-p process)
+                (sit-for 0.2))))))))
 
 (defun architect--create-project (template-name)
   "Create project by argument TEMPLATE-NAME.
@@ -359,6 +377,15 @@ This function is executed after `architect' function prompt."
     (dired architect-template-destination)
     (message "")))
 
+(defun architect--create-lambda-function (args key)
+  "Replace KEY value in ARGS by a lambda function to defer loading."
+  (when (plist-member args key)
+    (setq args (plist-put args key
+                 `(lambda ()
+                    (progn
+                      ,(plist-get args key))))))
+  args)
+
 ;;; External Architect functions.
 
 ;;;###autoload
@@ -371,7 +398,7 @@ This function is executed after `architect' function prompt."
            system-type))
 
 ;;;###autoload
-(defun architect-variable (&rest args)
+(defmacro architect-variable (&rest args)
   "Define variable that will be fetch in `architect--set-variables'.
 
   (architect-variable
@@ -386,14 +413,17 @@ This function is executed after `architect' function prompt."
                  If input is defined, its mean that Architect will provide
                  a prompt to the user.
 :input-error     String used as prompt error if it's not valid.
-:regex           String regex used to check if the value is valid or not."
-  (let ((prefix-error "Architect: architect-variable"))
-    (architect--validate args architect-variable-keywords prefix-error)
-    (let ((value (plist-get args :value))
+:regex           String regex used to check if the value is valid or not.
+:default-value   String or function used as default value."
+  (architect--create-lambda-function args :default-value)
+  `(let* ((prefix-error "Architect: architect-variable")
+          (args (progn (list ,@args)))
+          (value (plist-get args :value))
           (input (plist-get args :input)))
-      (when (or (and (not value) (not input))
-                (and value input))
-        (error (format "%s expects to receive :input or :value" prefix-error))))
+    (architect--validate args architect-variable-keywords prefix-error)
+    (when (or (and (not value) (not input))
+              (and value input))
+      (error (format "%s expects to receive :input or :value" prefix-error)))
     (setq architect-template-variables
           (append architect-template-variables (list args)))))
 
@@ -412,18 +442,22 @@ This function is executed after `architect' function prompt."
         (append architect-template-commits (list args))))
 
 ;;;###autoload
-(defun architect-shell-command (&rest args)
+(defmacro architect-shell-command (&rest args)
   "Define shell command that will be executed into `architect--execute-command'.
 
   (architect-shell-command
      [:keyword [ARGS]]...)
 
 :command  String used as shell command.
-:before   Reference of the step user want to execute the shell command."
-  (let ((prefix-error "Architect: architect-shell-command"))
-    (architect--validate args architect-shell-command-keywords prefix-error))
-  (setq architect-template-shell-command
-        (append architect-template-shell-command (list args))))
+:before   Reference of the step user want to execute the shell command.
+:quiet    True to execute the shell command quietly.
+:only-if  Condition needed to execute the shell command."
+  (architect--create-lambda-function args :only-if)
+  `(let ((prefix-error "Architect: architect-shell-command")
+         (args (progn (list ,@args))))
+    (architect--validate args architect-shell-command-keywords prefix-error)
+    (setq architect-template-shell-command
+          (append architect-template-shell-command (list args)))))
 
 ;;;###autoload
 (defun architect-default-directory (directory)
@@ -435,7 +469,13 @@ This command is used in `architect.el' template file."
 ;;;###autoload
 (defun architect-get (name)
   "Return variable value by NAME."
-  (alist-get name architect-template-replacements))
+  (cdr (assoc name architect-template-replacements)))
+
+;;;###autoload
+(defun architect-directory ()
+  "Return `architect-template-default-directory' directory name."
+  (file-name-nondirectory
+    (directory-file-name architect-template-destination)))
 
 ;;;###autoload
 (defun architect (template)
@@ -449,6 +489,7 @@ to create."
         architect-template-shell-command nil
         architect-template-default-directory nil)
   (architect--create-project template))
+
 
 (provide 'architect)
 
