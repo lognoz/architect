@@ -9,7 +9,6 @@ env:
     - EMACS_VERSION=25.1
     - EMACS_VERSION=26.1
     - EMACS_VERSION=27
-    - EMACS_VERSION=28
     - EMACS_VERSION=master
 
 jobs:
