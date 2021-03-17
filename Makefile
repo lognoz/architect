@@ -17,8 +17,7 @@ compile: $(ELCFILES)
 autoload:
 	@for f in $(FILES); do\
 		$(BATCH) --eval "(progn\
-		(let ((generated-autoload-file (expand-file-name \"autoload.el\")))\
-			(update-file-autoloads \""$${f}\"" t generated-autoload-file)))";\
+		(update-file-autoloads \""$${f}\"" t (expand-file-name \"autoload.el\")))";\
 	done
 
 checkdoc:
@@ -33,9 +32,11 @@ clean:
 	@rm -f autoload.el
 
 test:
-	@$(BATCH) --eval "(progn\
-	(load \"test/architect-test.el\" nil 'nomessage)\
-	(ert-run-tests-batch-and-exit))"
+	@if [ -d "test" ]; then \
+		$(BATCH) --eval "(progn\
+		(load \"test/architect-test.el\" nil 'nomessage)\
+		(ert-run-tests-batch-and-exit))"; \
+	fi
 
 version:
 	@$(BATCH) --eval "(progn\
